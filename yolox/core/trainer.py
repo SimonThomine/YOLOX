@@ -9,6 +9,8 @@ from loguru import logger
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
 
 from yolox.data import DataPrefetcher
 from yolox.exp import Exp
@@ -81,10 +83,18 @@ class Trainer:
         finally:
             self.after_train()
 
+
     def train_in_epoch(self):
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()
-            self.train_in_iter()
+            with tqdm(total=self.max_iter, desc="Training Progress", unit="iter",ascii=False) as pbar:
+                for self.iter in range(self.max_iter):
+                    self.before_iter()
+                    self.train_one_iter()
+                    self.after_iter()
+                    pbar.set_description(f"Epoch {self.epoch + 1}/{self.max_epoch}")
+                    pbar.update(1)
+
             self.after_epoch()
 
     def train_in_iter(self):
@@ -267,16 +277,17 @@ class Trainer:
 
             mem_str = "gpu mem: {:.0f}Mb, mem: {:.1f}Gb".format(gpu_mem_usage(), mem_usage())
 
-            logger.info(
-                "{}, {}, {}, {}, lr: {:.3e}".format(
-                    progress_str,
-                    mem_str,
-                    time_str,
-                    loss_str,
-                    self.meter["lr"].latest,
-                )
-                + (", size: {:d}, {}".format(self.input_size[0], eta_str))
-            )
+            # Log information at each batch iteration is a bit too much
+            # logger.info(
+            #     "{}, {}, {}, {}, lr: {:.3e}".format(
+            #         progress_str,
+            #         mem_str,
+            #         time_str,
+            #         loss_str,
+            #         self.meter["lr"].latest,
+            #     )
+            #     + (", size: {:d}, {}".format(self.input_size[0], eta_str))
+            # )
 
             if self.rank == 0:
                 if self.args.logger == "tensorboard":
